@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+
+# prywatne pliki robocze - nie wysylamy na GitHub
+pliki testowe/
+INPUT/*
+OUTPUT/*
+!INPUT/.gitkeep
+!OUTPUT/.gitkeep
+
+# zbudowane paczki dystrybucyjne (duze, generowane)
+*.zip
+out.log
