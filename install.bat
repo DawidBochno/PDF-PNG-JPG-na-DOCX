@@ -50,6 +50,6 @@ if errorlevel 1 (
 
 echo.
 echo ================================
-echo Gotowe. Uruchamiaj: PDF na DOC.bat
+echo Gotowe. Uruchamiaj: program_file-to-docx.bat
 echo ================================
 pause

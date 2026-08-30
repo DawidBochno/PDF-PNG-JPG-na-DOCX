@@ -24,7 +24,7 @@ Wymaga Pythona 3.11–3.13 na PATH oraz internetu (jednorazowo).
 
 ## Użycie
 
-Kliknij `PDF na DOC.bat`. W oknie:
+Kliknij `program_file-to-docx.bat`. W oknie:
 - wskaż pliki (można zaznaczyć wiele naraz) albo cały folder,
 - wskaż folder wyjściowy,
 - kliknij *Konwertuj*.
