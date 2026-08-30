@@ -8,7 +8,7 @@ for %%v in (3.13 3.12 3.11) do (
 )
 if not defined PYV (
     echo Nie znaleziono Pythona z zainstalowanymi bibliotekami.
-    echo Uruchom najpierw: "1. INSTALUJ NAJPIERW.bat"
+    echo Uruchom najpierw: install.bat
     pause
     exit /b 1
 )

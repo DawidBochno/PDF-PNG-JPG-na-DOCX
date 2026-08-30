@@ -19,7 +19,7 @@ Program sam rozpoznaje, z którym przypadkiem ma do czynienia — nie trzeba nic
 
 Wymaga Pythona 3.11–3.13 na PATH oraz internetu (jednorazowo).
 
-1. Kliknij `1. INSTALUJ NAJPIERW.bat` — zainstaluje biblioteki Pythona i silnik OCR (Tesseract, jeśli brakuje).
+1. Kliknij `install.bat` — zainstaluje biblioteki Pythona i silnik OCR (Tesseract, jeśli brakuje).
 2. Gotowe.
 
 ## Użycie
