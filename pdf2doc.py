@@ -30,13 +30,28 @@ DPI = 300
 
 
 def find_tesseract() -> str:
-    exe = shutil.which("tesseract") or r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    if not Path(exe).exists():
-        raise FileNotFoundError(
-            "Brak Tesseracta (silnika OCR). Zainstaluj:\n"
-            "winget install --id UB-Mannheim.TesseractOCR -e"
-        )
-    return exe
+    """Szuka silnika OCR. Instalator bez praw administratora wrzuca go do
+    folderu uzytkownika, a nie do Program Files - stad kilka lokalizacji.
+    """
+    import os
+    found = shutil.which("tesseract")
+    if found:
+        return found
+    local = os.environ.get("LOCALAPPDATA", "")
+    for cand in (
+        HERE / "tesseract" / "tesseract.exe",
+        Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
+        Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),
+        Path(local) / "Programs" / "Tesseract-OCR" / "tesseract.exe",
+        Path(local) / "Tesseract-OCR" / "tesseract.exe",
+    ):
+        if cand.exists():
+            return str(cand)
+    raise FileNotFoundError(
+        "Brak Tesseracta (silnika OCR) - jest potrzebny do skanow i zdjec.\n"
+        "Uruchom install.bat, albo zainstaluj recznie:\n"
+        "https://github.com/UB-Mannheim/tesseract/wiki"
+    )
 
 
 def _ocr_page_to_pdf(png_bytes: bytes, out_base: Path) -> Path:

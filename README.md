@@ -43,6 +43,12 @@ Test poprawności działania:
 py -3.11 pdf2doc.py --selftest
 ```
 
+## Problemy
+
+**„Brak Tesseracta (silnika OCR)"** — repozytorium zawiera pakiet językowy OCR, ale nie sam silnik (to osobny program). Uruchom `install.bat`; jeśli instalacja przez winget nie przejdzie (np. brak zgody UAC), zainstaluj ręcznie z [UB-Mannheim/tesseract](https://github.com/UB-Mannheim/tesseract/wiki). Instalacja bez uprawnień administratora też jest OK — program sprawdza również folder użytkownika.
+
+Dotyczy tylko skanów, zdjęć i PDF-ów bez warstwy tekstowej. PDF-y z tekstem konwertują się bez Tesseracta.
+
 ## Struktura
 
 - `pdf2doc.py` — cały program (GUI + logika konwersji)
