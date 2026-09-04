@@ -11,4 +11,8 @@ OUTPUT/*
 
 # zbudowane paczki dystrybucyjne (duze, generowane)
 *.zip
+*.exe
+*.spec
+dist/
+build/
 out.log

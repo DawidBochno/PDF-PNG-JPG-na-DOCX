@@ -21,25 +21,37 @@ from tkinter import filedialog, messagebox, ttk
 import pymupdf
 from pdf2docx import Converter
 
-HERE = Path(__file__).parent
-IN_DIR = HERE / "INPUT"
-OUT_DIR = HERE / "OUTPUT"
-TESSDATA_DIR = HERE / "tessdata"
+# Zbudowany .exe rozpakowuje zasoby do katalogu tymczasowego, ale foldery
+# robocze maja lezec obok samego .exe - stad dwa osobne korzenie.
+if getattr(sys, "frozen", False):
+    BUNDLE = Path(sys._MEIPASS)
+    APP_DIR = Path(sys.executable).parent
+else:
+    BUNDLE = APP_DIR = Path(__file__).parent
+
+IN_DIR = APP_DIR / "INPUT"
+OUT_DIR = APP_DIR / "OUTPUT"
+TESSDATA_DIR = BUNDLE / "tessdata"
 IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
 DPI = 300
+# Bez tego kazde wywolanie OCR mruga czarnym oknem konsoli (w .exe i pod pyw).
+NO_WINDOW = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
 
 
 def find_tesseract() -> str:
-    """Szuka silnika OCR. Instalator bez praw administratora wrzuca go do
-    folderu uzytkownika, a nie do Program Files - stad kilka lokalizacji.
+    """Szuka silnika OCR. Wersja dolaczona do paczki ma pierwszenstwo, potem
+    systemowa - instalator bez praw administratora wrzuca ja do folderu
+    uzytkownika, a nie do Program Files, stad kilka lokalizacji.
     """
     import os
+    bundled = BUNDLE / "tesseract" / "tesseract.exe"
+    if bundled.exists():
+        return str(bundled)
     found = shutil.which("tesseract")
     if found:
         return found
     local = os.environ.get("LOCALAPPDATA", "")
     for cand in (
-        HERE / "tesseract" / "tesseract.exe",
         Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
         Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),
         Path(local) / "Programs" / "Tesseract-OCR" / "tesseract.exe",
@@ -66,6 +78,7 @@ def _ocr_page_to_pdf(png_bytes: bytes, out_base: Path) -> Path:
     subprocess.run(
         [find_tesseract(), "-", str(out_base), "-l", "pol+eng", "--dpi", str(DPI), "pdf"],
         input=png_bytes, check=True, capture_output=True, env=env,
+        creationflags=NO_WINDOW,
     )
     return out_base.with_suffix(".pdf")
 
@@ -255,6 +268,14 @@ def selftest():
         assert out2.exists() and out2.stat().st_size > 0, "OCR: brak pliku docx"
         xml2 = zipfile.ZipFile(out2).read("word/document.xml").decode("utf8")
         assert "42" in xml2, f"OCR nie odczytal tekstu z obrazu: {xml2[:300]}"
+
+    # Okno musi dac sie zbudowac - w zbudowanym .exe brak bibliotek Tk objawia
+    # sie inaczej niz w zwyklym Pythonie: program po prostu znika bez sladu.
+    app = App()
+    app.withdraw()
+    app.update()
+    assert app.title() == "PDF/PNG/JPG -> DOCX", f"zly tytul okna: {app.title()}"
+    app.destroy()
     print("selftest OK")
 
 
