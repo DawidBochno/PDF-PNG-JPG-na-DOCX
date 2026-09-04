@@ -27,6 +27,17 @@ Foldery `INPUT/` i `OUTPUT/` tworzą się obok `.exe`.
 
 Przy pierwszym uruchomieniu Windows może pokazać ostrzeżenie SmartScreen („Nieznany wydawca") — to normalne dla niepodpisanego programu: *Więcej informacji* → *Uruchom mimo to*.
 
+### A2. Wariant folderowy — gdy sieć ma UTM albo antywirus blokuje `.exe`
+
+`build.py --onedir` daje folder `plik-to-docx/` (plus gotowy zip do przeniesienia). Klika się `plik-to-docx.exe` w środku.
+
+Dwie przewagi nad pojedynczym plikiem:
+
+- **Rzadziej blokowany.** Pojedynczy `.exe` rozpakowuje się przy każdym starcie do katalogu tymczasowego i stamtąd uruchamia — heurystyki antywirusów i UTM traktują to jak zachowanie droppera. Wariant folderowy tego nie robi.
+- **Startuje szybciej** — ok. 3 s zamiast 10 s, bo nie musi za każdym razem rozpakowywać 209 MB.
+
+Wada: to folder, a nie jedna ikonka.
+
 ### B. Ze źródeł (dla rozwijania programu)
 
 Wymaga Pythona 3.11–3.13 na PATH oraz internetu (jednorazowo).
@@ -66,7 +77,17 @@ py -3.13 -m pip install -r requirements.txt pyinstaller
 py -3.13 build.py
 ```
 
-Wynik: `dist/plik-to-docx.exe`. Skrypt sam wybiera z Tesseracta tylko to, co potrzebne do działania (silnik i biblioteki graficzne), pomijając narzędzia treningowe — to około połowa jego rozmiaru.
+Wynik: `dist/plik-to-docx.exe`. Wariant folderowy: `py -3.13 build.py --onedir` → `dist/plik-to-docx/` oraz `dist/plik-to-docx-folder.zip`.
+
+Skrypt sam wybiera z Tesseracta tylko to, co potrzebne do działania (silnik i biblioteki graficzne), pomijając narzędzia treningowe — to około połowa jego rozmiaru.
+
+### Przenoszenie do sieci z UTM
+
+Paczka jest offline — nic nie pobiera przy uruchomieniu, więc firewall i UTM nie mają czego blokować **w trakcie działania**. Problemem bywa samo dostarczenie pliku:
+
+- przenoś pendrivem albo jako zip, nie przez pobieranie z sieci,
+- jeśli UTM odrzuca `.exe` z zasady (niepodpisany plik wykonywalny), użyj wariantu folderowego w zipie,
+- w razie blokady poproś dział IT o wyjątek dla konkretnego pliku — program jest lokalny i nie łączy się z internetem, co łatwo uzasadnić.
 
 ## Problemy
 

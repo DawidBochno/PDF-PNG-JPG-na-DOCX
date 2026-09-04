@@ -4,8 +4,12 @@ Do paczki trafiaja: Python, biblioteki, pakiet jezykowy tessdata/ oraz silnik
 OCR (tesseract.exe + biblioteki .dll). Narzedzia treningowe Tesseracta sa
 pomijane - to polowa jego rozmiaru, a program ich nie uzywa.
 
-Uzycie:  py -3.13 build.py
-Wynik:   dist/plik-to-docx.exe
+Uzycie:  py -3.13 build.py            -> dist/plik-to-docx.exe (jeden plik)
+         py -3.13 build.py --onedir   -> dist/plik-to-docx/ (folder + zip)
+
+Wariant --onedir jest dla sieci z UTM/antywirusem, ktory blokuje pojedynczy
+.exe: onefile rozpakowuje sie do katalogu tymczasowego i stamtad uruchamia,
+co heurystyki traktuja jak zachowanie droppera. Folder startuje tez szybciej.
 """
 import os
 import shutil
@@ -44,13 +48,14 @@ def collect_tesseract() -> Path:
 
 
 def main() -> None:
+    onedir = "--onedir" in sys.argv
     tess = collect_tesseract()
     if not (HERE / "tessdata" / "configs" / "pdf").exists():
         sys.exit("Brak tessdata/configs/pdf - bez tego OCR nie zapisze PDF-a.")
 
     cmd = [
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
-        "--onefile", "--windowed", "--name", NAME,
+        "--onedir" if onedir else "--onefile", "--windowed", "--name", NAME,
         "--add-data", f"{HERE / 'tessdata'}{os.pathsep}tessdata",
         "--add-data", f"{tess}{os.pathsep}tesseract",
         str(HERE / "pdf2doc.py"),
@@ -58,8 +63,18 @@ def main() -> None:
     print("[build] PyInstaller...")
     subprocess.run(cmd, check=True, cwd=HERE)
 
-    exe = HERE / "dist" / f"{NAME}.exe"
-    print(f"[build] gotowe: {exe} ({exe.stat().st_size / 1024 / 1024:.0f} MB)")
+    if not onedir:
+        exe = HERE / "dist" / f"{NAME}.exe"
+        print(f"[build] gotowe: {exe} ({exe.stat().st_size / 1024 / 1024:.0f} MB)")
+        return
+
+    folder = HERE / "dist" / NAME
+    zip_path = HERE / "dist" / f"{NAME}-folder"
+    print("[build] pakuje folder do zip...")
+    shutil.make_archive(str(zip_path), "zip", root_dir=folder.parent, base_dir=folder.name)
+    print(f"[build] gotowe: {folder}\\{NAME}.exe")
+    print(f"[build] do przenoszenia: {zip_path}.zip "
+          f"({zip_path.with_suffix('.zip').stat().st_size / 1024 / 1024:.0f} MB)")
 
 
 if __name__ == "__main__":
