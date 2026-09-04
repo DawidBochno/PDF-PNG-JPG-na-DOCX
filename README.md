@@ -95,6 +95,17 @@ Paczka jest offline — nic nie pobiera przy uruchomieniu, więc firewall i UTM 
 
 Dotyczy tylko skanów, zdjęć i PDF-ów bez warstwy tekstowej. PDF-y z tekstem konwertują się bez Tesseracta.
 
+## Co jest w repozytorium, a co nie
+
+Podział jest celowy:
+
+| | Gdzie żyje | Dlaczego |
+|---|---|---|
+| Kod, skrypty, pakiet językowy OCR | **w repozytorium** (~23 MB) | to się pisze i rozwija; pakiet językowy jest dołączony, żeby nic nie trzeba było dociągać z sieci |
+| Zbudowany `.exe`, folder `dist/`, zipy | **poza repozytorium** | to się generuje z kodu, waży setki MB i przekracza limity GitHuba |
+
+Ciężką paczkę odtwarza się w każdej chwili poleceniem z sekcji *Budowanie* — nie ma potrzeby jej wersjonować. Przenosi się ją pendrivem, nie przez GitHuba.
+
 ## Struktura
 
 - `pdf2doc.py` — cały program (GUI + logika konwersji)
