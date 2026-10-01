@@ -85,24 +85,24 @@ def _ocr_page_to_pdf(png_bytes: bytes, out_base: Path) -> Path:
 
 def make_searchable(src: Path, tmp: Path) -> Path:
     """Zwraca PDF z warstwa tekstu gotowy do pdf2docx. Cyfrowy PDF (z tekstem)
-    oddaje bez zmian - to daje najlepsza jakosc. Obraz albo skan bez tekstu
-    najpierw OCR-uje strona po stronie."""
-    if src.suffix.lower() in IMAGE_EXTS:
-        png = pymupdf.open()  # tylko po to, by ujednolicic ladowanie obrazu
-        pix = pymupdf.Pixmap(str(src))
-        if pix.n - pix.alpha >= 4:  # CMYK -> RGB, tesseract tego nie lubi
-            pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
-        return _ocr_page_to_pdf(pix.tobytes("png"), tmp / src.stem)
-
+    oddaje bez zmian - to daje najlepsza jakosc. Obraz albo PDF z choc jedna
+    zeskanowana strona OCR-uje w calosci, strona po stronie (pdf2docx czyta
+    albo sam tekst z OCR, albo sam zwykly - nie oba w jednym pliku)."""
+    # obraz otwiera sie jako 1 strona juz obrocona wg EXIF (zdjecia z telefonu)
     doc = pymupdf.open(src)
-    has_text = any(p.get_text().strip() for p in doc)
-    if has_text:
-        doc.close()
+    if src.suffix.lower() in IMAGE_EXTS:
+        pix = pymupdf.Pixmap(str(src))  # rozdzielczosc oryginalu
+        zoom = max(pix.width, pix.height) / max(doc[0].rect.width, doc[0].rect.height)
+        mat = pymupdf.Matrix(zoom, zoom)
+    elif not any(not p.get_text().strip() and p.get_images() for p in doc):
+        doc.close()  # cyfrowy (puste strony bez obrazow nie sa skanami)
         return src
+    else:
+        mat = pymupdf.Matrix(DPI / 72, DPI / 72)
 
     out = pymupdf.open()
     for i, page in enumerate(doc):
-        png = page.get_pixmap(dpi=DPI).tobytes("png")
+        png = page.get_pixmap(matrix=mat).tobytes("png")
         page_pdf = _ocr_page_to_pdf(png, tmp / f"p{i}")
         with pymupdf.open(page_pdf) as one:
             out.insert_pdf(one)
@@ -268,6 +268,32 @@ def selftest():
         assert out2.exists() and out2.stat().st_size > 0, "OCR: brak pliku docx"
         xml2 = zipfile.ZipFile(out2).read("word/document.xml").decode("utf8")
         assert "42" in xml2, f"OCR nie odczytal tekstu z obrazu: {xml2[:300]}"
+
+        def text_page(doc, txt, rot=0):
+            p = doc.new_page(width=400, height=150)
+            p.insert_text((20, 60), txt, fontsize=24)
+            return p.get_pixmap(matrix=pymupdf.Matrix(3, 3).prerotate(rot))
+
+        # PDF mieszany: strona cyfrowa + skan -> tekst skanu nie moze zginac
+        tmp = pymupdf.open()
+        scan = text_page(tmp, "Faktura nr 777")
+        mixed = pymupdf.open()
+        mixed.new_page().insert_text((72, 100), "Pismo przewodnie")
+        mixed.new_page().insert_image(pymupdf.Rect(0, 0, 400, 150), pixmap=scan)
+        mixed.save(td / "mix.pdf")
+        xml3 = zipfile.ZipFile(convert_one(td / "mix.pdf", td / "OUT")
+                               ).read("word/document.xml").decode("utf8")
+        assert "777" in xml3 and "przewodnie" in xml3, f"PDF mieszany: {xml3[:300]}"
+
+        # zdjecie z telefonu: zapisane obrocone + EXIF Orientation=6
+        jpg = text_page(tmp, "Sygnatura 4321", rot=-90).tobytes("jpg")
+        exif = (b"Exif\x00\x00MM\x00\x2a\x00\x00\x00\x08\x00\x01"
+                b"\x01\x12\x00\x03\x00\x00\x00\x01\x00\x06\x00\x00\x00\x00\x00\x00")
+        (td / "foto.jpg").write_bytes(
+            jpg[:2] + b"\xff\xe1" + (len(exif) + 2).to_bytes(2, "big") + exif + jpg[2:])
+        xml4 = zipfile.ZipFile(convert_one(td / "foto.jpg", td / "OUT")
+                               ).read("word/document.xml").decode("utf8")
+        assert "4321" in xml4, f"EXIF: zdjecie nieobrocone: {xml4[:300]}"
 
     # Okno musi dac sie zbudowac - w zbudowanym .exe brak bibliotek Tk objawia
     # sie inaczej niz w zwyklym Pythonie: program po prostu znika bez sladu.
