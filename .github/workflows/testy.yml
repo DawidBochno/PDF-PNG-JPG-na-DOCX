@@ -1,0 +1,23 @@
+name: Testy
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  selftest:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Tesseract OCR (silnik; jezyki pol/eng sa w repo w tessdata/)
+        run: choco install tesseract --no-progress -y
+      - run: python -m pip install -r requirements.txt
+      - run: python pdf2doc.py --selftest
