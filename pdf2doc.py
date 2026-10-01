@@ -302,6 +302,8 @@ def selftest():
     app.update()
     assert app.title() == "PDF/PNG/JPG -> DOCX", f"zly tytul okna: {app.title()}"
     app.destroy()
+    import aktualizacja
+    aktualizacja.selftest()
     print("selftest OK")
 
 
@@ -316,4 +318,7 @@ if __name__ == "__main__":
         for p in files:
             print(f"{p.name} -> {convert_one(p, dst)}")
     else:
-        App().mainloop()
+        import aktualizacja
+        app = App()
+        aktualizacja.start(app, "DawidBochno/PDF-PNG-JPG-na-DOCX", "master", "pdf2doc.py")
+        app.mainloop()

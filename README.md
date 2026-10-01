@@ -4,6 +4,8 @@ Lokalny, wsadowy konwerter dokumentów do edytowalnego Worda. Pliki nie opuszcza
 
 Wymaga systemu **Windows**.
 
+![Okno programu](docs/okno.png)
+
 ## Co przetwarza
 
 - **PDF z tekstem** (nie skan) → konwersja bezpośrednia, najlepsza jakość: układ i tabele odtworzone jako prawdziwe, edytowalne elementy Worda.
@@ -45,20 +47,20 @@ Przy pierwszym uruchomieniu Windows może pokazać ostrzeżenie SmartScreen („
 
 Wymaga Pythona 3.11–3.13 na PATH oraz internetu (jednorazowo, na pobranie bibliotek).
 
-1. Kliknij `install.bat` — zainstaluje biblioteki Pythona i silnik OCR (Tesseract, jeśli brakuje).
-2. Uruchamiaj przez `program_file-to-docx.bat`.
+1. **Python** — pobierz z [python.org](https://www.python.org/downloads/windows/) (3.11–3.13). W instalatorze zaznacz **„Add python.exe to PATH”**. Opcja „tcl/tk and IDLE” jest zaznaczona domyślnie i musi taka zostać.
+2. **Program** — na stronie [github.com/DawidBochno/PDF-PNG-JPG-na-DOCX](https://github.com/DawidBochno/PDF-PNG-JPG-na-DOCX) kliknij **Code → Download ZIP** i rozpakuj archiwum, np. do `C:\Programy\OCR`.
+3. Kliknij dwukrotnie `install.bat`. Instaluje biblioteki Pythona i silnik OCR (Tesseract, jeśli go brakuje).
+4. Uruchamiaj przez `program_file-to-docx.bat`. Wygodnie jest zrobić skrót na pulpicie: prawy przycisk → *Wyślij do* → *Pulpit*.
 
 ---
 
 ## Użycie
 
-W oknie programu:
-
-- wskaż pliki (można zaznaczyć wiele naraz) albo cały folder,
-- wskaż folder wyjściowy,
-- kliknij *Konwertuj*.
-
-Domyślnie program podnosi pliki z folderu `INPUT/` i zapisuje wynik do `OUTPUT/`.
+1. Uruchom program. Od razu wczytuje pliki z folderu `INPUT/` (napis „N plik(ów) z: INPUT”).
+2. Inne pliki wskażesz przyciskiem **Wybierz pliki…** (kilka naraz z Ctrl) albo **Wybierz folder INPUT…**.
+3. **Folder OUTPUT** to miejsce zapisu plików Worda. Zmienisz go przyciskiem **Zmień…**.
+4. Kliknij **Konwertuj**. Pasek pokazuje postęp, a log wynik każdego pliku. Skany trwają dłużej (OCR zajmuje kilka sekund na stronę).
+5. Dla każdego pliku powstaje `nazwa.docx` w folderze OUTPUT. Oryginały nie są zmieniane.
 
 Tryb konsolowy:
 
@@ -75,6 +77,15 @@ py -3.13 pdf2doc.py --selftest
 ```
 
 Ten sam test działa na zbudowanej paczce — `plik-to-docx.exe --selftest` kończy się kodem wyjścia `0`, gdy wszystko działa. Warto tak sprawdzić paczkę po przeniesieniu na inny komputer, zanim odda się ją użytkownikowi.
+
+## Aktualizacje
+
+Po uruchomieniu program sprawdza w tle na GitHubie, czy jest nowa wersja. Do GitHuba trafia tylko zapytanie o listę plików programu, **nigdy dokumenty ani dane**. Bez internetu albo przy blokadzie (UTM) program działa normalnie, bez komunikatu.
+
+- **Wariant ze źródeł**: gdy jest nowa wersja, program pyta *„Pobrać i zainstalować teraz?”* i pobiera tylko zmienione pliki. Folderów `INPUT/` i `OUTPUT/` nie rusza. Potem uruchom program ponownie.
+- **Gotowa paczka (.exe)**: program tylko informuje, że jest nowsza wersja. Nową paczkę trzeba zbudować (*Budowanie paczki*) i przenieść tak jak poprzednią.
+- **Wyłączenie** (np. gdy aktualizacje robi dział IT): pusty plik `NIE_AKTUALIZUJ` w folderze programu (przy paczce obok `.exe`).
+- Kopię z `git clone` aktualizuje się przez `git pull`.
 
 ## Budowanie paczki
 
@@ -103,7 +114,7 @@ Paczka jest w pełni offline — nic nie pobiera przy uruchomieniu, więc **w tr
 
 - przenoś pendrivem albo jako zip, zamiast pobierać z sieci,
 - jeśli UTM odrzuca `.exe` z zasady (niepodpisany plik wykonywalny), użyj wariantu folderowego w zipie,
-- w razie blokady poproś dział IT o wyjątek — program działa lokalnie i nie łączy się z internetem, co łatwo uzasadnić.
+- w razie blokady poproś dział IT o wyjątek. Program działa lokalnie i nie wysyła żadnych plików, co łatwo uzasadnić. Jedyne połączenie to sprawdzenie aktualizacji, które można wyłączyć (patrz *Aktualizacje*).
 
 ---
 
