@@ -98,7 +98,7 @@ LANGS = {
 }
 DPIS = {"300 DPI": 300, "400 DPI (drobny druk)": 400}
 # nazwa wyniku: {0} = nazwa zrodla, {1} = dzisiejsza data
-NAMING = {"jak plik zrodlowy": "{0}", "z data (pismo_2026-10-06)": "{0}_{1:%Y-%m-%d}",
+NAMING = {"jak plik zrodlowy": "{0}", "z data (pismo_RRRR-MM-DD)": "{0}_{1:%Y-%m-%d}",
           "z dopiskiem _OCR": "{0}_OCR"}
 OVERWRITE = {"pytaj": "ask", "nadpisz": "overwrite", "dopisz numer (2)": "number"}
 
