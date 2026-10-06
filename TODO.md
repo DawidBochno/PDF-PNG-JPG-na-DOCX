@@ -6,14 +6,17 @@ Odhaczone `[x]` = zrobione.
 
 ## Jakość OCR
 
-- [ ] **Przygotowanie obrazu przed OCR** — prostowanie krzywego skanu,
-  kontrast, odszumianie. Pomaga przy błędach w polskich znakach na skanach
-  w niskiej rozdzielczości („Majac” zamiast „Mając”).
-- [ ] **Słownik poprawek** — plik tekstowy z parami `błąd → poprawka`
+- [x] ~~**Przygotowanie obrazu przed OCR**~~ — sprawdzone i odrzucone
+  (2026-10-06). Na prawdziwych skanach z modelem `best` szarość, kontrast,
+  wyostrzanie, filtr medianowy i 400 DPI dają 8–9 błędnych słów wobec 9 bez
+  obróbki — brak zysku, a wolniej. Wrócić, gdyby trafiły się krzywe skany
+  albo zdjęcia z telefonu w złym świetle.
+- [x] **Słownik poprawek** — plik tekstowy z parami `błąd → poprawka`
   (np. „Zyrardów” → „Żyrardów”), uzupełniany przez użytkownika i stosowany
-  po OCR.
-- [ ] **Dokładniejszy model polskiego** (`tessdata_best/pol`) — wolniejszy
-  (ok. 2×). Najpierw zmierzyć różnicę na prawdziwych skanach.
+  po OCR. Plik `poprawki.txt` obok programu, przycisk w oknie.
+- [x] **Dokładniejszy model polskiego** (`tessdata_best/pol`) — zmierzone:
+  błędnych słów 23 → 9, poprawnych polskich 43 → 61, czas bez zmian,
+  plik mniejszy (12 MB zamiast 19 MB).
 
 ## Wierność układu
 
