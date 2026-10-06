@@ -118,6 +118,10 @@ Paczka jest w pełni offline — nic nie pobiera przy uruchomieniu, więc **w tr
 
 ---
 
+## Plany
+
+Pomysły na rozwój i opcjonalne ustawienia: [TODO.md](TODO.md).
+
 ## Problemy
 
 **„Brak Tesseracta (silnika OCR)"**
