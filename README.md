@@ -61,11 +61,20 @@ Wymaga Pythona 3.11–3.13 na PATH oraz internetu (jednorazowo, na pobranie bibl
 3. **Folder OUTPUT** to miejsce zapisu plików Worda. Zmienisz go przyciskiem **Zmień…**.
 4. Opcjonalnie, w ramce **Opcje**:
    - **Język OCR** — polski + angielski (domyślnie), tylko polski, z niemieckim albo z ukraińskim. Dotyczy skanów i zdjęć; język dobierz do pisma, bo np. bez niemieckiego „ß” i „ö” wychodzą jako krzaki.
+   - **Rozdzielczość OCR** — 300 DPI (domyślnie) albo 400 DPI przy drobnym druku (przypisy, regulaminy). 400 DPI pomaga tylko wtedy, gdy skan ma co najmniej taką rozdzielczość, a OCR trwa wtedy dłużej. Na zwykłych pismach 300 DPI w zupełności wystarcza.
+   - **Nazwa pliku** — jak plik źródłowy (domyślnie), z dzisiejszą datą (`pismo_2026-10-06.docx`) albo z dopiskiem `_OCR` (`pismo_OCR.docx`).
+   - **Gdy plik istnieje** — co zrobić, gdy w OUTPUT jest już plik o tej nazwie:
+     - **pytaj** (domyślnie) — przed startem pojawia się jedno pytanie dla całej paczki: nadpisać czy zapisać obok z numerem;
+     - **nadpisz**;
+     - **dopisz numer** — powstaje `pismo (2).docx`, `pismo (3).docx` itd.
    - **Strony** — np. `1-3, 5` albo `4-` (od 4. do końca). Puste pole = wszystkie strony. Zakres dotyczy każdego wybranego PDF-a; strony spoza pliku są pomijane.
    - **Pomijaj puste strony** — domyślnie włączone (tył skanu dwustronnego nie trafia do Worda). Wyłącz, jeśli numeracja stron ma się zgadzać z oryginałem.
+   - **Jeden plik zbiorczy** — wszystkie wybrane pliki trafiają do jednego DOCX, w kolejności z listy, każdy od nowej strony. Plik nosi nazwę pierwszego pliku (zwykle pisma). Pliki są ułożone alfabetycznie, więc pismo zaczynające się od `1_` albo `a_` będzie pierwsze.
+     - Zakres stron dotyczy każdego PDF-a z osobna.
+     - Gdy wśród plików jest skan albo zdjęcie, całość idzie przez OCR, więc tabele z cyfrowych PDF-ów wychodzą jako zwykły tekst. Jeśli tabele są ważne, konwertuj pliki osobno.
    - **Słownik poprawek OCR…** — otwiera w Notatniku plik `poprawki.txt` (obok programu). Wpisz w nim słowa, które OCR stale myli w Twoich pismach, po jednym w linii: `Zyrardow => Żyrardów`. Zamieniane są całe słowa, z rozróżnieniem wielkich liter, tylko w skanach i zdjęciach. Zmiany działają od następnego pliku, bez restartu. Aktualizacja programu nie nadpisuje tego pliku.
 5. Kliknij **Konwertuj**. Pasek pokazuje postęp, a log wynik każdego pliku. Skany trwają dłużej (OCR zajmuje kilka sekund na stronę).
-6. Dla każdego pliku powstaje `nazwa.docx` w folderze OUTPUT. Oryginały nie są zmieniane.
+6. Dla każdego pliku powstaje `nazwa.docx` w folderze OUTPUT (albo jeden plik zbiorczy). Oryginały nie są zmieniane.
 
 Tryb konsolowy:
 
