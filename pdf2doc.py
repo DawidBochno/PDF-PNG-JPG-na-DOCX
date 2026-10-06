@@ -36,6 +36,16 @@ else:
 
 IN_DIR = APP_DIR / "INPUT"
 OUT_DIR = APP_DIR / "OUTPUT"
+# slownik poprawek OCR uzytkownika - poza repo, zeby aktualizacja go nie nadpisala
+FIXES_FILE = APP_DIR / "poprawki.txt"
+FIXES_HEADER = """\
+# Slownik poprawek OCR - jedna poprawka w linii:  zle => dobrze
+# Zamieniane sa cale slowa, z rozroznieniem wielkosci liter.
+# Dziala dla skanow i zdjec. Linie zaczynajace sie od # sa pomijane.
+# Przyklady (usun # na poczatku, zeby wlaczyc):
+# Zyrardow => Żyrardów
+# niezbedne => niezbędne
+"""
 TESSDATA_DIR = BUNDLE / "tessdata"
 IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
 DPI = 300
@@ -194,6 +204,31 @@ def _paragraphs(lines: list[dict]) -> list[dict]:
     return paras
 
 
+def load_fixes(path: Path = None) -> dict[str, str]:
+    """Czyta slownik poprawek; przy pierwszym uruchomieniu tworzy pusty wzor."""
+    path = path or FIXES_FILE
+    if not path.exists():
+        try:
+            path.write_text(FIXES_HEADER, encoding="utf-8")
+        except OSError:  # folder tylko do odczytu - po prostu bez poprawek
+            pass
+        return {}
+    fixes = {}
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        bad, sep, good = line.partition("=>")
+        if sep and not line.lstrip().startswith("#") and bad.strip():
+            fixes[bad.strip()] = good.strip()
+    return fixes
+
+
+def apply_fixes(text: str, fixes: dict[str, str]) -> str:
+    """Zamienia cale slowa (nie fragmenty: 'Sad' nie rusza 'Sadowski')."""
+    if not fixes:
+        return text
+    alt = "|".join(re.escape(k) for k in sorted(fixes, key=len, reverse=True))
+    return re.sub(rf"(?<!\w)(?:{alt})(?!\w)", lambda m: fixes[m.group(0)], text)
+
+
 def ocr_to_docx(src: Path, docx_path: Path, lang: str = "pol+eng",
                 pages_sel: list[int] | None = None, skip_blank: bool = True) -> None:
     """Skan/zdjecie -> DOCX z akapitami odtworzonymi z OCR (bez pdf2docx:
@@ -211,6 +246,7 @@ def ocr_to_docx(src: Path, docx_path: Path, lang: str = "pol+eng",
         unit, page_w, page_h = zoom / a4, 595.3, page_h * a4
     else:
         zoom = unit = DPI / 72
+    fixes = load_fixes()  # czytany przy kazdym pliku - zmiany dzialaja bez restartu
     pages = []
     for no in range(len(doc)) if pages_sel is None else pages_sel:
         page = doc[no]
@@ -254,7 +290,7 @@ def ocr_to_docx(src: Path, docx_path: Path, lang: str = "pol+eng",
             fmt.space_before = Pt(min(max(p["gap"] - pitch, 0), 36))
             fmt.left_indent = Pt(max(p["x0"] - p["left"], 0))
             fmt.first_line_indent = Pt(p["first_x0"] - p["x0"])
-            par.add_run(p["text"])
+            par.add_run(apply_fixes(p["text"], fixes))
     if not pages:
         out.add_paragraph("(nie rozpoznano tekstu)")
     out.save(docx_path)
@@ -289,7 +325,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("PDF/PNG/JPG -> DOCX")
-        self.geometry("720x580")
+        self.geometry("720x610")
         self.files: list[Path] = []
         self.log_q: queue.Queue[str] = queue.Queue()
 
@@ -324,6 +360,8 @@ class App(tk.Tk):
         ttk.Checkbutton(opt, text="Pomijaj puste strony (np. tyl skanu dwustronnego)",
                         variable=self.blank_var).grid(row=2, column=0, columnspan=3, sticky="w",
                                                       pady=(6, 0))
+        ttk.Button(opt, text="Slownik poprawek OCR...", command=self.edit_fixes).grid(
+            row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         self.btn = ttk.Button(self, text="Konwertuj", command=self.start)
         self.btn.pack(pady=10)
@@ -361,6 +399,13 @@ class App(tk.Tk):
         d = filedialog.askdirectory(title="Folder ze zrodlowymi plikami")
         if d:
             self.load(self._scan(Path(d)), d)
+
+    def edit_fixes(self):
+        load_fixes()  # tworzy wzor, jesli go jeszcze nie ma
+        try:
+            os.startfile(FIXES_FILE)
+        except OSError as e:
+            messagebox.showwarning("PDF -> DOCX", f"Nie mozna otworzyc {FIXES_FILE}:\n{e}")
 
     def pick_out(self):
         d = filedialog.askdirectory(title="Folder wyjsciowy")
@@ -418,6 +463,8 @@ def selftest():
 
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
+        global FIXES_FILE  # test nie moze tworzyc poprawki.txt w folderze programu
+        FIXES_FILE = td / "poprawki.txt"
         src = td / "t.pdf"
         doc = pymupdf.open()
         page = doc.new_page()
@@ -475,6 +522,15 @@ def selftest():
         xml4 = zipfile.ZipFile(convert_one(td / "foto.jpg", td / "OUT")
                                ).read("word/document.xml").decode("utf8")
         assert "4321" in xml4, f"EXIF: zdjecie nieobrocone: {xml4[:300]}"
+
+        # slownik poprawek: wzor tworzony przy pierwszym uzyciu, cale slowa
+        assert load_fixes() == {} and FIXES_FILE.exists(), "brak wzoru poprawek"
+        FIXES_FILE.write_text(FIXES_HEADER + "Sygnatura => Sygn.\nnr=>numer\n", encoding="utf-8")
+        assert load_fixes() == {"Sygnatura": "Sygn.", "nr": "numer"}
+        assert apply_fixes("nr 5, Sygnatura, nrX", load_fixes()) == "numer 5, Sygn., nrX"
+        xml6 = zipfile.ZipFile(convert_one(td / "foto.jpg", td / "OUT")
+                               ).read("word/document.xml").decode("utf8")
+        assert "Sygn. 4321" in xml6, f"poprawki nie zastosowane: {xml6[:300]}"
 
         # opcje: zakres stron
         assert parse_pages("", 3) == [0, 1, 2]

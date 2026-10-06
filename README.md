@@ -63,6 +63,7 @@ Wymaga Pythona 3.11–3.13 na PATH oraz internetu (jednorazowo, na pobranie bibl
    - **Język OCR** — polski + angielski (domyślnie), tylko polski, z niemieckim albo z ukraińskim. Dotyczy skanów i zdjęć; język dobierz do pisma, bo np. bez niemieckiego „ß” i „ö” wychodzą jako krzaki.
    - **Strony** — np. `1-3, 5` albo `4-` (od 4. do końca). Puste pole = wszystkie strony. Zakres dotyczy każdego wybranego PDF-a; strony spoza pliku są pomijane.
    - **Pomijaj puste strony** — domyślnie włączone (tył skanu dwustronnego nie trafia do Worda). Wyłącz, jeśli numeracja stron ma się zgadzać z oryginałem.
+   - **Słownik poprawek OCR…** — otwiera w Notatniku plik `poprawki.txt` (obok programu). Wpisz w nim słowa, które OCR stale myli w Twoich pismach, po jednym w linii: `Zyrardow => Żyrardów`. Zamieniane są całe słowa, z rozróżnieniem wielkich liter, tylko w skanach i zdjęciach. Zmiany działają od następnego pliku, bez restartu. Aktualizacja programu nie nadpisuje tego pliku.
 5. Kliknij **Konwertuj**. Pasek pokazuje postęp, a log wynik każdego pliku. Skany trwają dłużej (OCR zajmuje kilka sekund na stronę).
 6. Dla każdego pliku powstaje `nazwa.docx` w folderze OUTPUT. Oryginały nie są zmieniane.
 
@@ -161,10 +162,11 @@ Ciężką paczkę odtwarza się w każdej chwili jednym poleceniem, więc nie ma
 - `program_file-to-docx.bat` — uruchamia program ze źródeł
 - `requirements.txt` — biblioteki Pythona
 - `tessdata/` — modele językowe OCR (pol, eng, deu, ukr), dołączone na stałe
+- `poprawki.txt` — Twój słownik poprawek OCR; tworzony przez program, nie ma go w repozytorium
 - `INPUT/`, `OUTPUT/` — foldery robocze (ich zawartość nie trafia do repozytorium)
 
 ## Użyte składniki
 
 - [pdf2docx](https://github.com/ArtifexSoftware/pdf2docx) i [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — analiza PDF i odtwarzanie układu
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (Apache 2.0) — silnik OCR; gotowa paczka zawiera jego pliki wykonywalne, co licencja dopuszcza
-- [tessdata](https://github.com/tesseract-ocr/tessdata) — modele językowe pol, eng; [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) — deu, ukr
+- [tessdata_best](https://github.com/tesseract-ocr/tessdata_best) — model pol; [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) — eng, deu, ukr

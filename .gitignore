@@ -16,3 +16,6 @@ OUTPUT/*
 dist/
 build/
 out.log
+
+# slownik poprawek uzytkownika (tworzony przez program)
+poprawki.txt
