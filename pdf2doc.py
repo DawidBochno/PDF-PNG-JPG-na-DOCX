@@ -1,10 +1,11 @@
 """PDF/PNG/JPG -> DOCX. Wsadowo, z zachowaniem ukladu i tabel.
 
 PDF z tekstem (nie skan) idzie prosto do konwersji - najlepsza jakosc.
-Obrazy i zeskanowane PDF-y najpierw przechodza przez OCR (Tesseract, pol+eng),
-ktory dokleja niewidoczna warstwe tekstu, a dopiero potem trafiaja do konwersji.
+Obrazy i zeskanowane PDF-y przechodza przez OCR (Tesseract), z ktorego
+program sam sklada DOCX (akapity, wciecia, jedna czcionka).
 
 Okienko: wskaz pliki albo folder INPUT, wskaz OUTPUT, klikaj Konwertuj.
+Opcje w okienku: jezyk OCR, zakres stron, pomijanie pustych stron.
 Konsola: python pdf2doc.py INPUT_folder OUTPUT_folder
 Test:    python pdf2doc.py --selftest
 """
@@ -75,7 +76,39 @@ MIN_CONF = 50
 BULLET = re.compile(r"^([-–•*]\s|\d{1,2}[.)]\s|[a-z][)]\s)")
 
 
-def _ocr_lines(png_bytes: bytes, scale: float) -> list[dict]:
+# napis w okienku -> jezyki Tesseracta (modele w tessdata/)
+LANGS = {
+    "polski + angielski": "pol+eng",
+    "tylko polski": "pol",
+    "polski + angielski + niemiecki": "pol+eng+deu",
+    "polski + angielski + ukrainski": "pol+eng+ukr",
+}
+
+
+def parse_pages(spec: str, count: int) -> list[int]:
+    """'1-3, 5, 8-' -> numery stron od 0, tylko istniejace. Puste = wszystkie."""
+    if not spec.strip():
+        return list(range(count))
+    pages = set()
+    for part in spec.replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        a, dash, b = part.partition("-")
+        try:
+            lo = int(a)
+            hi = (int(b) if b.strip() else count) if dash else lo
+        except ValueError:
+            raise ValueError(f"zly zakres stron: '{part}' (przyklad: 1-3, 5)") from None
+        if lo < 1 or hi < lo:
+            raise ValueError(f"zly zakres stron: '{part}' (przyklad: 1-3, 5)")
+        pages.update(range(lo - 1, min(hi, count)))
+    if not pages:
+        raise ValueError(f"plik ma {count} str. - brak stron z zakresu '{spec}'")
+    return sorted(pages)
+
+
+def _ocr_lines(png_bytes: bytes, scale: float, lang: str = "pol+eng") -> list[dict]:
     """OCR jednego obrazu -> linie tekstu {x0, x1, y0, y1, text} w punktach.
 
     Jezyk bierzemy z wlasnego folderu tessdata/ (przenosnie, bez uprawnien
@@ -84,7 +117,7 @@ def _ocr_lines(png_bytes: bytes, scale: float) -> list[dict]:
     """
     env = {**os.environ, "TESSDATA_PREFIX": str(TESSDATA_DIR)}
     out = subprocess.run(
-        [find_tesseract(), "-", "-", "-l", "pol+eng", "--dpi", str(DPI), "tsv"],
+        [find_tesseract(), "-", "-", "-l", lang, "--dpi", str(DPI), "tsv"],
         input=png_bytes, check=True, capture_output=True, env=env,
         creationflags=NO_WINDOW,
     ).stdout.decode("utf8")
@@ -161,7 +194,8 @@ def _paragraphs(lines: list[dict]) -> list[dict]:
     return paras
 
 
-def ocr_to_docx(src: Path, docx_path: Path) -> None:
+def ocr_to_docx(src: Path, docx_path: Path, lang: str = "pol+eng",
+                pages_sel: list[int] | None = None, skip_blank: bool = True) -> None:
     """Skan/zdjecie -> DOCX z akapitami odtworzonymi z OCR (bez pdf2docx:
     z niewidocznego tekstu OCR robil losowe rozmiary czcionek i gubil bloki)."""
     from docx import Document
@@ -178,13 +212,14 @@ def ocr_to_docx(src: Path, docx_path: Path) -> None:
     else:
         zoom = unit = DPI / 72
     pages = []
-    for page in doc:
+    for no in range(len(doc)) if pages_sel is None else pages_sel:
+        page = doc[no]
         if page.get_text().strip():
             lines = _text_lines(page)
         else:
             png = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom)).tobytes("png")
-            lines = _ocr_lines(png, unit)
-        if lines:  # puste strony (np. tyl skanu dwustronnego) pomijamy
+            lines = _ocr_lines(png, unit, lang)
+        if lines or not skip_blank:  # pusta strona = np. tyl skanu dwustronnego
             pages.append(_paragraphs(lines))
     doc.close()
 
@@ -208,6 +243,8 @@ def ocr_to_docx(src: Path, docx_path: Path) -> None:
     sec.left_margin = Pt(min(max(min((p["left"] for p in paras), default=72), 18), 108))
     sec.right_margin = Pt(min(max(page_w - max((p["x1"] for p in paras), default=0), 18), 108))
     for n, ps in enumerate(pages):
+        if not ps:  # zachowana pusta strona
+            out.add_paragraph().paragraph_format.page_break_before = bool(n)
         for i, p in enumerate(ps):
             par = out.add_paragraph()
             if i == 0 and n:
@@ -223,25 +260,26 @@ def ocr_to_docx(src: Path, docx_path: Path) -> None:
     out.save(docx_path)
 
 
-def is_scan(src: Path) -> bool:
-    """Obraz albo PDF z choc jedna zeskanowana strona (puste strony bez
-    obrazow nie sa skanami)."""
-    if src.suffix.lower() in IMAGE_EXTS:
-        return True
-    with pymupdf.open(src) as doc:
-        return any(not p.get_text().strip() and p.get_images() for p in doc)
-
-
-def convert_one(src: Path, out_dir: Path) -> Path:
+def convert_one(src: Path, out_dir: Path, lang: str = "pol+eng",
+                pages: str = "", skip_blank: bool = True) -> Path:
+    """pages: zakres jak w okienku ('1-3, 5'; puste = wszystkie). Obrazy maja
+    jedna strone, wiec zakres ich nie dotyczy."""
     out_dir.mkdir(parents=True, exist_ok=True)
     docx = out_dir / f"{src.stem}.docx"
-    if is_scan(src):
-        ocr_to_docx(src, docx)
+    if src.suffix.lower() in IMAGE_EXTS:
+        ocr_to_docx(src, docx, lang, None, skip_blank)
+        return docx
+    with pymupdf.open(src) as doc:
+        sel = parse_pages(pages, len(doc))
+        # skan = strona bez tekstu, ale z obrazem (pusta bez obrazu to nie skan)
+        scan = any(not doc[i].get_text().strip() and doc[i].get_images() for i in sel)
+    if scan:
+        ocr_to_docx(src, docx, lang, sel, skip_blank)
         return docx
     # cyfrowy PDF: pdf2docx zachowuje uklad i tabele - najlepsza jakosc
     c = Converter(str(src))
     try:
-        c.convert(str(docx))
+        c.convert(str(docx), pages=sel)
     finally:
         c.close()
     return docx
@@ -251,7 +289,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("PDF/PNG/JPG -> DOCX")
-        self.geometry("720x460")
+        self.geometry("720x580")
         self.files: list[Path] = []
         self.log_q: queue.Queue[str] = queue.Queue()
 
@@ -269,6 +307,23 @@ class App(tk.Tk):
         ttk.Label(top, text="Folder OUTPUT:").grid(row=2, column=0, sticky="w")
         ttk.Entry(top, textvariable=self.out_var, width=62).grid(row=3, column=0, columnspan=2, sticky="we")
         ttk.Button(top, text="Zmien...", command=self.pick_out).grid(row=3, column=2, padx=6)
+
+        opt = ttk.LabelFrame(self, text="Opcje", padding=8)
+        opt.pack(fill="x", padx=10)
+        self.lang_var = tk.StringVar(value=next(iter(LANGS)))
+        self.pages_var = tk.StringVar()
+        self.blank_var = tk.BooleanVar(value=True)
+        ttk.Label(opt, text="Jezyk OCR:").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(opt, textvariable=self.lang_var, values=list(LANGS), state="readonly",
+                     width=32).grid(row=0, column=1, sticky="w", padx=6)
+        ttk.Label(opt, text="Strony:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Entry(opt, textvariable=self.pages_var, width=20).grid(row=1, column=1, sticky="w",
+                                                                    padx=6, pady=(6, 0))
+        ttk.Label(opt, text="np. 1-3, 5   (puste = wszystkie)", foreground="gray").grid(
+            row=1, column=2, sticky="w", pady=(6, 0))
+        ttk.Checkbutton(opt, text="Pomijaj puste strony (np. tyl skanu dwustronnego)",
+                        variable=self.blank_var).grid(row=2, column=0, columnspan=3, sticky="w",
+                                                      pady=(6, 0))
 
         self.btn = ttk.Button(self, text="Konwertuj", command=self.start)
         self.btn.pack(pady=10)
@@ -316,17 +371,24 @@ class App(tk.Tk):
         if not self.files:
             messagebox.showwarning("PDF -> DOCX", "Najpierw wskaz pliki albo folder.")
             return
+        opts = {"lang": LANGS[self.lang_var.get()], "pages": self.pages_var.get(),
+                "skip_blank": self.blank_var.get()}
+        try:  # literowka w zakresie: komunikat od razu, nie przy kazdym pliku
+            parse_pages(opts["pages"], 10**6)
+        except ValueError as e:
+            messagebox.showwarning("PDF -> DOCX", str(e))
+            return
         self.btn.config(state="disabled")
         self.log.delete("1.0", "end")
         self.bar.config(value=0, maximum=len(self.files))
-        threading.Thread(target=self.work, args=(list(self.files), Path(self.out_var.get())),
+        threading.Thread(target=self.work, args=(list(self.files), Path(self.out_var.get()), opts),
                          daemon=True).start()
 
-    def work(self, files, out_dir):
+    def work(self, files, out_dir, opts):
         ok = 0
         for i, pdf in enumerate(files, 1):
             try:
-                docx = convert_one(pdf, out_dir)
+                docx = convert_one(pdf, out_dir, **opts)
                 ok += 1
                 self.log_q.put(f"[{i}/{len(files)}] OK   {pdf.name} -> {docx.name}")
             except Exception as e:  # jeden zly plik nie moze zatrzymac reszty
@@ -413,6 +475,38 @@ def selftest():
         xml4 = zipfile.ZipFile(convert_one(td / "foto.jpg", td / "OUT")
                                ).read("word/document.xml").decode("utf8")
         assert "4321" in xml4, f"EXIF: zdjecie nieobrocone: {xml4[:300]}"
+
+        # opcje: zakres stron
+        assert parse_pages("", 3) == [0, 1, 2]
+        assert parse_pages("1-2, 5; 2", 10) == [0, 1, 4]
+        assert parse_pages("3-", 5) == [2, 3, 4]
+        assert parse_pages("2-9", 3) == [1, 2]
+        for bad in ("a", "0", "3-1", "1-x"):
+            try:
+                parse_pages(bad, 5)
+                raise AssertionError(f"przepuszczony zly zakres: {bad}")
+            except ValueError:
+                pass
+        xml5 = zipfile.ZipFile(convert_one(td / "mix.pdf", td / "OUT", pages="2")
+                               ).read("word/document.xml").decode("utf8")
+        assert "777" in xml5 and "przewodnie" not in xml5, f"zakres stron: {xml5[:300]}"
+
+        # opcje: pusta strona skanu (bialy obraz) pomijana albo zachowana
+        white = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 300, 100), False)
+        white.set_rect(white.irect, (255, 255, 255))
+        duplex = pymupdf.open()
+        duplex.new_page().insert_image(pymupdf.Rect(0, 0, 400, 150), pixmap=scan)
+        duplex.new_page().insert_image(pymupdf.Rect(0, 0, 400, 150), pixmap=white)
+        duplex.save(td / "duplex.pdf")
+        for skip, breaks in ((True, 0), (False, 1)):
+            x = zipfile.ZipFile(convert_one(td / "duplex.pdf", td / "OUT", skip_blank=skip)
+                                ).read("word/document.xml").decode("utf8")
+            assert x.count("<w:pageBreakBefore/>") == breaks, f"puste strony skip={skip}"
+
+    # opcje: jezyki OCR - kazdy model musi byc w tessdata/
+    for codes in LANGS.values():
+        for code in codes.split("+"):
+            assert (TESSDATA_DIR / f"{code}.traineddata").exists(), f"brak modelu {code}"
 
     # Okno musi dac sie zbudowac - w zbudowanym .exe brak bibliotek Tk objawia
     # sie inaczej niz w zwyklym Pythonie: program po prostu znika bez sladu.
