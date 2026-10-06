@@ -110,7 +110,7 @@ py -3.13 -m pip install -r requirements.txt pyinstaller
 py -3.13 build.py
 ```
 
-Wynik: `dist/plik-to-docx.exe`.
+Wynik: `dist/plik-to-docx.exe`, a obok niego `LICENSE.txt`. Przenoś je razem — licencja wymaga, żeby była dołączona do programu.
 
 Wariant folderowy:
 
@@ -118,7 +118,7 @@ Wariant folderowy:
 py -3.13 build.py --onedir
 ```
 
-Wynik: `dist/plik-to-docx/` oraz gotowy do przeniesienia `dist/plik-to-docx-folder.zip`.
+Wynik: `dist/plik-to-docx/` (z `LICENSE.txt` w środku) oraz gotowy do przeniesienia `dist/plik-to-docx-folder.zip`.
 
 Skrypt kopiuje z Tesseracta tylko to, co potrzebne do działania (silnik i biblioteki graficzne), pomijając narzędzia treningowe — to około połowa jego rozmiaru.
 
@@ -170,12 +170,24 @@ Ciężką paczkę odtwarza się w każdej chwili jednym poleceniem, więc nie ma
 - `install.bat` — instalacja zależności dla wariantu ze źródeł
 - `program_file-to-docx.bat` — uruchamia program ze źródeł
 - `requirements.txt` — biblioteki Pythona
+- `LICENSE` — licencja (AGPL-3.0)
 - `tessdata/` — modele językowe OCR (pol, eng, deu, ukr), dołączone na stałe
 - `poprawki.txt` — Twój słownik poprawek OCR; tworzony przez program, nie ma go w repozytorium
 - `INPUT/`, `OUTPUT/` — foldery robocze (ich zawartość nie trafia do repozytorium)
 
 ## Użyte składniki
 
-- [pdf2docx](https://github.com/ArtifexSoftware/pdf2docx) i [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — analiza PDF i odtwarzanie układu
+- [pdf2docx](https://github.com/ArtifexSoftware/pdf2docx) (MIT) i [PyMuPDF](https://github.com/pymupdf/PyMuPDF) (AGPL-3.0) — analiza PDF i odtwarzanie układu
+- [python-docx](https://github.com/python-openxml/python-docx) (MIT) — składanie DOCX ze skanów
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (Apache 2.0) — silnik OCR; gotowa paczka zawiera jego pliki wykonywalne, co licencja dopuszcza
-- [tessdata_best](https://github.com/tesseract-ocr/tessdata_best) — model pol; [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) — eng, deu, ukr
+- [tessdata_best](https://github.com/tesseract-ocr/tessdata_best) — model pol; [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) — eng, deu, ukr (Apache 2.0)
+
+## Licencja
+
+Program jest udostępniony na licencji [GNU AGPL-3.0](LICENSE). Wolno go używać (także w firmie i urzędzie), kopiować, zmieniać i przekazywać dalej.
+- Kto przekazuje program innym, zwłaszcza gotową paczkę `.exe`, musi dołączyć tę licencję i udostępnić kod źródłowy, np. link do tego repozytorium.
+- Zmieniona wersja przekazywana dalej musi zostać na tej samej licencji.
+- Licencję wymusza biblioteka PyMuPDF (AGPL-3.0), która wchodzi w skład programu i gotowej paczki.
+- Program jest udostępniany bez żadnej gwarancji.
+
+Składniki zewnętrzne mają własne licencje, wymienione wyżej w „Użyte składniki”.

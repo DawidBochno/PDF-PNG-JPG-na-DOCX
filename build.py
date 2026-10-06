@@ -62,6 +62,8 @@ def main() -> None:
     ]
     print("[build] PyInstaller...")
     subprocess.run(cmd, check=True, cwd=HERE)
+    # AGPL (PyMuPDF): licencja musi jechac razem z programem
+    shutil.copy2(HERE / "LICENSE", HERE / "dist" / (NAME if onedir else "") / "LICENSE.txt")
 
     if not onedir:
         exe = HERE / "dist" / f"{NAME}.exe"
