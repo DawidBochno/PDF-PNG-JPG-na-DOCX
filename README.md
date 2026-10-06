@@ -9,8 +9,8 @@ Wymaga systemu **Windows**.
 ## Co przetwarza
 
 - **PDF z tekstem** (nie skan) → konwersja bezpośrednia, najlepsza jakość: układ i tabele odtworzone jako prawdziwe, edytowalne elementy Worda.
-- **PDF-skan / PNG / JPG** → najpierw OCR (Tesseract, język polski + angielski), dopiero potem konwersja do DOCX. Zdjęcia z telefonu są obracane według zapisanej orientacji (EXIF).
-- **PDF mieszany** (np. pismo z dołączonymi skanami) → OCR całego pliku, żeby tekst skanów nie zginął. Strony cyfrowe też przechodzą przez OCR, więc ich układ może być nieco prostszy niż przy czystym PDF z tekstem.
+- **PDF-skan / PNG / JPG** → OCR (Tesseract, język polski + angielski), z którego program sam składa DOCX: akapity, wcięcia i odstępy jak w oryginale, jedna czcionka w całym dokumencie. Puste strony (np. tył skanu dwustronnego) są pomijane, a napisy z logo i pieczątek, których OCR nie jest pewien, odrzucane. Zdjęcia z telefonu są obracane według zapisanej orientacji (EXIF).
+- **PDF mieszany** (np. pismo z dołączonymi skanami) → strony ze skanem idą przez OCR, a tekst stron cyfrowych jest brany wprost; całość trafia do jednego DOCX w tym samym układzie co skany (bez tabel).
 
 Program sam rozpoznaje, z którym przypadkiem ma do czynienia — nie trzeba nic przełączać.
 
