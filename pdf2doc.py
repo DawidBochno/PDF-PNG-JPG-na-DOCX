@@ -8,13 +8,17 @@ Okienko: wskaz pliki albo folder INPUT, wskaz OUTPUT, klikaj Konwertuj.
 Konsola: python pdf2doc.py INPUT_folder OUTPUT_folder
 Test:    python pdf2doc.py --selftest
 """
+import csv
+import io
+import os
 import queue
+import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import threading
 import tkinter as tk
+from collections import defaultdict
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -43,7 +47,6 @@ def find_tesseract() -> str:
     systemowa - instalator bez praw administratora wrzuca ja do folderu
     uzytkownika, a nie do Program Files, stad kilka lokalizacji.
     """
-    import os
     bundled = BUNDLE / "tesseract" / "tesseract.exe"
     if bundled.exists():
         return str(bundled)
@@ -66,67 +69,181 @@ def find_tesseract() -> str:
     )
 
 
-def _ocr_page_to_pdf(png_bytes: bytes, out_base: Path) -> Path:
-    """OCR-uje jeden obraz (bajty PNG) i zwraca PDF z niewidoczna warstwa tekstu.
+# pewnosc OCR (0-100): slowa i linie ponizej to zwykle logo, pieczatka, podpis
+MIN_WORD_CONF = 40
+MIN_CONF = 50
+BULLET = re.compile(r"^([-–•*]\s|\d{1,2}[.)]\s|[a-z][)]\s)")
+
+
+def _ocr_lines(png_bytes: bytes, scale: float) -> list[dict]:
+    """OCR jednego obrazu -> linie tekstu {x0, x1, y0, y1, text} w punktach.
 
     Jezyk bierzemy z wlasnego folderu tessdata/ (przenosnie, bez uprawnien
     administratora) - stad TESSDATA_PREFIX zamiast --tessdata-dir, ktore w
-    tesseract 5 psuje parsowanie nastepujacego po nim configfile "pdf".
+    tesseract 5 psuje parsowanie nastepujacego po nim configfile.
     """
-    import os
     env = {**os.environ, "TESSDATA_PREFIX": str(TESSDATA_DIR)}
-    subprocess.run(
-        [find_tesseract(), "-", str(out_base), "-l", "pol+eng", "--dpi", str(DPI), "pdf"],
+    out = subprocess.run(
+        [find_tesseract(), "-", "-", "-l", "pol+eng", "--dpi", str(DPI), "tsv"],
         input=png_bytes, check=True, capture_output=True, env=env,
         creationflags=NO_WINDOW,
-    )
-    return out_base.with_suffix(".pdf")
+    ).stdout.decode("utf8")
+    words = defaultdict(list)
+    for r in csv.DictReader(io.StringIO(out), delimiter="\t", quoting=csv.QUOTE_NONE):
+        if r["level"] == "5" and r["text"].strip() and float(r["conf"]) >= MIN_WORD_CONF:
+            words[(r["block_num"], r["par_num"], r["line_num"])].append(r)
+    lines = []
+    for ws in words.values():
+        text = " ".join(w["text"] for w in ws)
+        if sum(float(w["conf"]) for w in ws) / len(ws) < MIN_CONF or not any(c.isalnum() for c in text):
+            continue
+        lines.append({
+            "x0": min(int(w["left"]) for w in ws) / scale,
+            "x1": max(int(w["left"]) + int(w["width"]) for w in ws) / scale,
+            "y0": min(int(w["top"]) for w in ws) / scale,
+            "y1": max(int(w["top"]) + int(w["height"]) for w in ws) / scale,
+            # mediana, bo pieczatka nachodzaca na linie zawyza jej obrys
+            "h": sorted(int(w["height"]) for w in ws)[len(ws) // 2] / scale,
+            "text": text,
+        })
+    return lines
 
 
-def make_searchable(src: Path, tmp: Path) -> Path:
-    """Zwraca PDF z warstwa tekstu gotowy do pdf2docx. Cyfrowy PDF (z tekstem)
-    oddaje bez zmian - to daje najlepsza jakosc. Obraz albo PDF z choc jedna
-    zeskanowana strona OCR-uje w calosci, strona po stronie (pdf2docx czyta
-    albo sam tekst z OCR, albo sam zwykly - nie oba w jednym pliku)."""
-    # obraz otwiera sie jako 1 strona juz obrocona wg EXIF (zdjecia z telefonu)
-    doc = pymupdf.open(src)
+def _text_lines(page) -> list[dict]:
+    """Linie z cyfrowej strony (w PDF mieszanym) - w tym samym formacie co OCR."""
+    lines = []
+    for b in page.get_text("dict")["blocks"]:
+        for ln in b.get("lines", []):
+            text = "".join(s["text"] for s in ln["spans"]).strip()
+            if text:
+                x0, y0, x1, y1 = ln["bbox"]
+                lines.append({"x0": x0, "x1": x1, "y0": y0, "y1": y1, "h": y1 - y0, "text": text})
+    return lines
+
+
+def _paragraphs(lines: list[dict]) -> list[dict]:
+    """Skleja linie w akapity wg geometrii: nowy akapit po wiekszej przerwie,
+    po krotkiej linii (koniec akapitu), przy wcieciu albo punktorze."""
+    if not lines:
+        return []
+    right = max(ln["x1"] for ln in lines)
+    left = min(ln["x0"] for ln in lines)
+    paras = []
+    prev = None
+    for ln in lines:  # kolejnosc czytania (OCR trzyma kolumny osobno)
+        h = ln["h"]
+        new = (
+            prev is None
+            or ln["y0"] <= prev["y0"]  # nastepna kolumna / blok obok
+            or ln["y0"] - prev["y1"] > 0.8 * h
+            or prev["x1"] < right - 0.15 * (right - left)
+            or ln["x0"] > prev["x0"] + h
+            or BULLET.match(ln["text"])
+        )
+        if new:
+            paras.append({"x0": ln["x0"], "first_x0": ln["x0"], "x1": ln["x1"],
+                          "gap": 0 if prev is None else ln["y0"] - prev["y0"],
+                          "h": [h], "ys": [ln["y0"]], "text": ln["text"]})
+        else:
+            p = paras[-1]
+            p["x0"] = min(p["x0"], ln["x0"])
+            p["x1"] = max(p["x1"], ln["x1"])
+            p["h"].append(h)
+            p["ys"].append(ln["y0"])
+            # przeniesienie wyrazu: "zdro-" + "wotnych"
+            if p["text"].endswith("-") and ln["text"][:1].islower():
+                p["text"] = p["text"][:-1] + ln["text"]
+            else:
+                p["text"] += " " + ln["text"]
+        prev = ln
+    for p in paras:
+        p["left"] = left
+    return paras
+
+
+def ocr_to_docx(src: Path, docx_path: Path) -> None:
+    """Skan/zdjecie -> DOCX z akapitami odtworzonymi z OCR (bez pdf2docx:
+    z niewidocznego tekstu OCR robil losowe rozmiary czcionek i gubil bloki)."""
+    from docx import Document
+    from docx.shared import Pt
+
+    doc = pymupdf.open(src)  # obraz otwiera sie juz obrocony wg EXIF
+    page_w, page_h = doc[0].rect.width, doc[0].rect.height
     if src.suffix.lower() in IMAGE_EXTS:
         pix = pymupdf.Pixmap(str(src))  # rozdzielczosc oryginalu
-        zoom = max(pix.width, pix.height) / max(doc[0].rect.width, doc[0].rect.height)
-        mat = pymupdf.Matrix(zoom, zoom)
-    elif not any(not p.get_text().strip() and p.get_images() for p in doc):
-        doc.close()  # cyfrowy (puste strony bez obrazow nie sa skanami)
-        return src
+        zoom = max(pix.width, pix.height) / max(page_w, page_h)
+        # zdjecie nie ma rozmiaru w punktach - traktujemy je jak strone A4
+        a4 = 595.3 / page_w
+        unit, page_w, page_h = zoom / a4, 595.3, page_h * a4
     else:
-        mat = pymupdf.Matrix(DPI / 72, DPI / 72)
-
-    out = pymupdf.open()
-    for i, page in enumerate(doc):
-        png = page.get_pixmap(matrix=mat).tobytes("png")
-        page_pdf = _ocr_page_to_pdf(png, tmp / f"p{i}")
-        with pymupdf.open(page_pdf) as one:
-            out.insert_pdf(one)
+        zoom = unit = DPI / 72
+    pages = []
+    for page in doc:
+        if page.get_text().strip():
+            lines = _text_lines(page)
+        else:
+            png = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom)).tobytes("png")
+            lines = _ocr_lines(png, unit)
+        if lines:  # puste strony (np. tyl skanu dwustronnego) pomijamy
+            pages.append(_paragraphs(lines))
     doc.close()
-    dst = tmp / f"{src.stem}_ocr.pdf"
-    out.save(dst)
-    out.close()
-    return dst
+
+    def median(xs, default):
+        xs = sorted(xs)
+        return xs[len(xs) // 2] if xs else default
+
+    paras = [p for ps in pages for p in ps]
+    body_h = median((h for p in paras for h in p["h"]), 12)
+    # odstep miedzy liniami akapitu = 1.15 rozmiaru czcionki (Times, interlinia
+    # pojedyncza); sama wysokosc linii OCR zawyza rozmiar przez akcenty i ogonki
+    pitch = median((b - a for p in paras for a, b in zip(p["ys"], p["ys"][1:])), body_h)
+    body_pt = min(max(round(pitch / 1.15 * 2) / 2, 8), 16)
+
+    out = Document()
+    out.styles["Normal"].font.name = "Times New Roman"
+    out.styles["Normal"].font.size = Pt(body_pt)
+    sec = out.sections[0]
+    sec.page_width, sec.page_height = Pt(page_w), Pt(page_h)
+    sec.top_margin = sec.bottom_margin = Pt(36)
+    sec.left_margin = Pt(min(max(min((p["left"] for p in paras), default=72), 18), 108))
+    sec.right_margin = Pt(min(max(page_w - max((p["x1"] for p in paras), default=0), 18), 108))
+    for n, ps in enumerate(pages):
+        for i, p in enumerate(ps):
+            par = out.add_paragraph()
+            if i == 0 and n:
+                par.paragraph_format.page_break_before = True
+            fmt = par.paragraph_format
+            fmt.space_after = Pt(0)
+            fmt.space_before = Pt(min(max(p["gap"] - pitch, 0), 36))
+            fmt.left_indent = Pt(max(p["x0"] - p["left"], 0))
+            fmt.first_line_indent = Pt(p["first_x0"] - p["x0"])
+            par.add_run(p["text"])
+    if not pages:
+        out.add_paragraph("(nie rozpoznano tekstu)")
+    out.save(docx_path)
+
+
+def is_scan(src: Path) -> bool:
+    """Obraz albo PDF z choc jedna zeskanowana strona (puste strony bez
+    obrazow nie sa skanami)."""
+    if src.suffix.lower() in IMAGE_EXTS:
+        return True
+    with pymupdf.open(src) as doc:
+        return any(not p.get_text().strip() and p.get_images() for p in doc)
 
 
 def convert_one(src: Path, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     docx = out_dir / f"{src.stem}.docx"
-    with tempfile.TemporaryDirectory() as td:
-        pdf = make_searchable(src, Path(td))
-        # pdf po naszym OCR ma tylko niewidoczna warstwe tekstu (bez wizualnych
-        # glifow) - domyslnie pdf2docx taki tekst odrzuca (ocr=0), wiec dla
-        # wlasnie zrobionego OCR mowimy mu wprost: to jest tekst z OCR (ocr=2)
-        ocr_mode = 2 if pdf != src else 0
-        c = Converter(str(pdf))
-        try:
-            c.convert(str(docx), ocr=ocr_mode)
-        finally:
-            c.close()
+    if is_scan(src):
+        ocr_to_docx(src, docx)
+        return docx
+    # cyfrowy PDF: pdf2docx zachowuje uklad i tabele - najlepsza jakosc
+    c = Converter(str(src))
+    try:
+        c.convert(str(docx))
+    finally:
+        c.close()
     return docx
 
 
@@ -284,6 +401,8 @@ def selftest():
         xml3 = zipfile.ZipFile(convert_one(td / "mix.pdf", td / "OUT")
                                ).read("word/document.xml").decode("utf8")
         assert "777" in xml3 and "przewodnie" in xml3, f"PDF mieszany: {xml3[:300]}"
+        # skan: jedna czcionka dla calego tekstu (pdf2docx dawal kazdemu slowu inny rozmiar)
+        assert "<w:sz " not in xml3, "skan: rozne rozmiary czcionek"
 
         # zdjecie z telefonu: zapisane obrocone + EXIF Orientation=6
         jpg = text_page(tmp, "Sygnatura 4321", rot=-90).tobytes("jpg")
