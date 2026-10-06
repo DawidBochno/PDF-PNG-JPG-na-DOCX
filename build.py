@@ -50,8 +50,8 @@ def collect_tesseract() -> Path:
 def main() -> None:
     onedir = "--onedir" in sys.argv
     tess = collect_tesseract()
-    if not (HERE / "tessdata" / "configs" / "pdf").exists():
-        sys.exit("Brak tessdata/configs/pdf - bez tego OCR nie zapisze PDF-a.")
+    if not (HERE / "tessdata" / "configs" / "tsv").exists():
+        sys.exit("Brak tessdata/configs/tsv - bez tego OCR nie zwroci tekstu.")
 
     cmd = [
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",

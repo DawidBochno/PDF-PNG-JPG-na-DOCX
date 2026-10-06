@@ -44,10 +44,10 @@ Pole wyboru / lista w oknie, zapamiętywane między uruchomieniami
 
 - [ ] **Format wyjścia**: DOCX (domyślnie) / PDF z warstwą tekstu
   (przeszukiwalny skan) / TXT.
-- [ ] **Język OCR**: polski + angielski (domyślnie) / tylko polski /
-  dodatkowo niemiecki, ukraiński (wymaga dołączenia modeli do `tessdata/`).
-- [ ] **Zakres stron**: np. `1-3, 5` z długiego PDF-a.
-- [ ] **Pomijanie pustych stron**: włączone (domyślnie) / wyłączone.
+- [x] **Język OCR**: polski + angielski (domyślnie) / tylko polski /
+  dodatkowo niemiecki, ukraiński (modele `tessdata_fast` w `tessdata/`).
+- [x] **Zakres stron**: np. `1-3, 5` z długiego PDF-a.
+- [x] **Pomijanie pustych stron**: włączone (domyślnie) / wyłączone.
 - [ ] **Czułość filtra śmieci** (próg pewności OCR): łagodny / normalny /
   ostry — przy pieczątkach na tekście.
 - [ ] **Czcionka i rozmiar**: automatycznie (domyślnie) / wybrana czcionka

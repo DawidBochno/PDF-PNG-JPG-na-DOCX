@@ -9,10 +9,10 @@ Wymaga systemu **Windows**.
 ## Co przetwarza
 
 - **PDF z tekstem** (nie skan) → konwersja bezpośrednia, najlepsza jakość: układ i tabele odtworzone jako prawdziwe, edytowalne elementy Worda.
-- **PDF-skan / PNG / JPG** → OCR (Tesseract, język polski + angielski), z którego program sam składa DOCX: akapity, wcięcia i odstępy jak w oryginale, jedna czcionka w całym dokumencie. Puste strony (np. tył skanu dwustronnego) są pomijane, a napisy z logo i pieczątek, których OCR nie jest pewien, odrzucane. Zdjęcia z telefonu są obracane według zapisanej orientacji (EXIF).
+- **PDF-skan / PNG / JPG** → OCR (Tesseract, domyślnie język polski + angielski), z którego program sam składa DOCX: akapity, wcięcia i odstępy jak w oryginale, jedna czcionka w całym dokumencie. Puste strony (np. tył skanu dwustronnego) są domyślnie pomijane, a napisy z logo i pieczątek, których OCR nie jest pewien, odrzucane. Zdjęcia z telefonu są obracane według zapisanej orientacji (EXIF).
 - **PDF mieszany** (np. pismo z dołączonymi skanami) → strony ze skanem idą przez OCR, a tekst stron cyfrowych jest brany wprost; całość trafia do jednego DOCX w tym samym układzie co skany (bez tabel).
 
-Program sam rozpoznaje, z którym przypadkiem ma do czynienia — nie trzeba nic przełączać.
+Program sam rozpoznaje, z którym przypadkiem ma do czynienia — nie trzeba nic przełączać. Opcje w oknie są dodatkowe, domyślnie ustawione tak, że nie trzeba ich ruszać.
 
 ## Ograniczenia
 
@@ -59,8 +59,12 @@ Wymaga Pythona 3.11–3.13 na PATH oraz internetu (jednorazowo, na pobranie bibl
 1. Uruchom program. Od razu wczytuje pliki z folderu `INPUT/` (napis „N plik(ów) z: INPUT”).
 2. Inne pliki wskażesz przyciskiem **Wybierz pliki…** (kilka naraz z Ctrl) albo **Wybierz folder INPUT…**.
 3. **Folder OUTPUT** to miejsce zapisu plików Worda. Zmienisz go przyciskiem **Zmień…**.
-4. Kliknij **Konwertuj**. Pasek pokazuje postęp, a log wynik każdego pliku. Skany trwają dłużej (OCR zajmuje kilka sekund na stronę).
-5. Dla każdego pliku powstaje `nazwa.docx` w folderze OUTPUT. Oryginały nie są zmieniane.
+4. Opcjonalnie, w ramce **Opcje**:
+   - **Język OCR** — polski + angielski (domyślnie), tylko polski, z niemieckim albo z ukraińskim. Dotyczy skanów i zdjęć; język dobierz do pisma, bo np. bez niemieckiego „ß” i „ö” wychodzą jako krzaki.
+   - **Strony** — np. `1-3, 5` albo `4-` (od 4. do końca). Puste pole = wszystkie strony. Zakres dotyczy każdego wybranego PDF-a; strony spoza pliku są pomijane.
+   - **Pomijaj puste strony** — domyślnie włączone (tył skanu dwustronnego nie trafia do Worda). Wyłącz, jeśli numeracja stron ma się zgadzać z oryginałem.
+5. Kliknij **Konwertuj**. Pasek pokazuje postęp, a log wynik każdego pliku. Skany trwają dłużej (OCR zajmuje kilka sekund na stronę).
+6. Dla każdego pliku powstaje `nazwa.docx` w folderze OUTPUT. Oryginały nie są zmieniane.
 
 Tryb konsolowy:
 
@@ -156,11 +160,11 @@ Ciężką paczkę odtwarza się w każdej chwili jednym poleceniem, więc nie ma
 - `install.bat` — instalacja zależności dla wariantu ze źródeł
 - `program_file-to-docx.bat` — uruchamia program ze źródeł
 - `requirements.txt` — biblioteki Pythona
-- `tessdata/` — pakiet językowy OCR (pol + eng), dołączony na stałe
+- `tessdata/` — modele językowe OCR (pol, eng, deu, ukr), dołączone na stałe
 - `INPUT/`, `OUTPUT/` — foldery robocze (ich zawartość nie trafia do repozytorium)
 
 ## Użyte składniki
 
 - [pdf2docx](https://github.com/ArtifexSoftware/pdf2docx) i [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — analiza PDF i odtwarzanie układu
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (Apache 2.0) — silnik OCR; gotowa paczka zawiera jego pliki wykonywalne, co licencja dopuszcza
-- [tessdata](https://github.com/tesseract-ocr/tessdata) — modele językowe pol + eng
+- [tessdata](https://github.com/tesseract-ocr/tessdata) — modele językowe pol, eng; [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) — deu, ukr
