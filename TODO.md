@@ -61,12 +61,12 @@ Pole wyboru / lista w oknie, zapamiętywane między uruchomieniami
   (do wklejania w inne pismo).
 - [ ] **Podział stron**: każda strona od nowej strony (domyślnie) /
   ciągły tekst.
-- [ ] **Jeden plik zbiorczy** — wszystkie wybrane pliki do jednego DOCX
+- [x] **Jeden plik zbiorczy** — wszystkie wybrane pliki do jednego DOCX
   (np. pismo + załączniki).
-- [ ] **Nazwa pliku wyjściowego**: jak źródło (domyślnie) / z dopiskiem
+- [x] **Nazwa pliku wyjściowego**: jak źródło (domyślnie) / z dopiskiem
   daty / z dopiskiem `_OCR`.
-- [ ] **Nadpisywanie**: pytaj / nadpisz / dopisz numer `(2)`.
-- [ ] **Rozdzielczość OCR** (DPI): 300 (domyślnie) / 400 przy drobnym druku.
+- [x] **Nadpisywanie**: pytaj / nadpisz / dopisz numer `(2)`.
+- [x] **Rozdzielczość OCR** (DPI): 300 (domyślnie) / 400 przy drobnym druku.
 - [ ] **Usuń plik źródłowy z INPUT po udanej konwersji** (przeniesienie do
   `INPUT/zrobione/`, bez kasowania).
 

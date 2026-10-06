@@ -5,7 +5,8 @@ Obrazy i zeskanowane PDF-y przechodza przez OCR (Tesseract), z ktorego
 program sam sklada DOCX (akapity, wciecia, jedna czcionka).
 
 Okienko: wskaz pliki albo folder INPUT, wskaz OUTPUT, klikaj Konwertuj.
-Opcje w okienku: jezyk OCR, zakres stron, pomijanie pustych stron.
+Opcje w okienku: jezyk i rozdzielczosc OCR, zakres stron, pomijanie pustych
+stron, nazwa wyniku, nadpisywanie, jeden plik zbiorczy.
 Konsola: python pdf2doc.py INPUT_folder OUTPUT_folder
 Test:    python pdf2doc.py --selftest
 """
@@ -17,9 +18,11 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import tkinter as tk
 from collections import defaultdict
+from datetime import date
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -93,6 +96,20 @@ LANGS = {
     "polski + angielski + niemiecki": "pol+eng+deu",
     "polski + angielski + ukrainski": "pol+eng+ukr",
 }
+DPIS = {"300 DPI": 300, "400 DPI (drobny druk)": 400}
+# nazwa wyniku: {0} = nazwa zrodla, {1} = dzisiejsza data
+NAMING = {"jak plik zrodlowy": "{0}", "z data (pismo_2026-10-06)": "{0}_{1:%Y-%m-%d}",
+          "z dopiskiem _OCR": "{0}_OCR"}
+OVERWRITE = {"pytaj": "ask", "nadpisz": "overwrite", "dopisz numer (2)": "number"}
+
+
+def target(out_dir: Path, stem: str, naming: str = "{0}", overwrite: str = "overwrite") -> Path:
+    """Sciezka wyniku; przy overwrite='number' zajeta nazwa dostaje ' (2)', ' (3)'..."""
+    base = naming.format(stem, date.today())
+    path, n = out_dir / f"{base}.docx", 2
+    while overwrite == "number" and path.exists():
+        path, n = out_dir / f"{base} ({n}).docx", n + 1
+    return path
 
 
 def parse_pages(spec: str, count: int) -> list[int]:
@@ -118,7 +135,7 @@ def parse_pages(spec: str, count: int) -> list[int]:
     return sorted(pages)
 
 
-def _ocr_lines(png_bytes: bytes, scale: float, lang: str = "pol+eng") -> list[dict]:
+def _ocr_lines(png_bytes: bytes, scale: float, lang: str = "pol+eng", dpi: int = DPI) -> list[dict]:
     """OCR jednego obrazu -> linie tekstu {x0, x1, y0, y1, text} w punktach.
 
     Jezyk bierzemy z wlasnego folderu tessdata/ (przenosnie, bez uprawnien
@@ -127,7 +144,7 @@ def _ocr_lines(png_bytes: bytes, scale: float, lang: str = "pol+eng") -> list[di
     """
     env = {**os.environ, "TESSDATA_PREFIX": str(TESSDATA_DIR)}
     out = subprocess.run(
-        [find_tesseract(), "-", "-", "-l", lang, "--dpi", str(DPI), "tsv"],
+        [find_tesseract(), "-", "-", "-l", lang, "--dpi", str(dpi), "tsv"],
         input=png_bytes, check=True, capture_output=True, env=env,
         creationflags=NO_WINDOW,
     ).stdout.decode("utf8")
@@ -230,7 +247,8 @@ def apply_fixes(text: str, fixes: dict[str, str]) -> str:
 
 
 def ocr_to_docx(src: Path, docx_path: Path, lang: str = "pol+eng",
-                pages_sel: list[int] | None = None, skip_blank: bool = True) -> None:
+                pages_sel: list[int] | None = None, skip_blank: bool = True,
+                dpi: int = DPI) -> None:
     """Skan/zdjecie -> DOCX z akapitami odtworzonymi z OCR (bez pdf2docx:
     z niewidocznego tekstu OCR robil losowe rozmiary czcionek i gubil bloki)."""
     from docx import Document
@@ -245,7 +263,7 @@ def ocr_to_docx(src: Path, docx_path: Path, lang: str = "pol+eng",
         a4 = 595.3 / page_w
         unit, page_w, page_h = zoom / a4, 595.3, page_h * a4
     else:
-        zoom = unit = DPI / 72
+        zoom = unit = dpi / 72
     fixes = load_fixes()  # czytany przy kazdym pliku - zmiany dzialaja bez restartu
     pages = []
     for no in range(len(doc)) if pages_sel is None else pages_sel:
@@ -254,7 +272,7 @@ def ocr_to_docx(src: Path, docx_path: Path, lang: str = "pol+eng",
             lines = _text_lines(page)
         else:
             png = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom)).tobytes("png")
-            lines = _ocr_lines(png, unit, lang)
+            lines = _ocr_lines(png, unit, lang, dpi)
         if lines or not skip_blank:  # pusta strona = np. tyl skanu dwustronnego
             pages.append(_paragraphs(lines))
     doc.close()
@@ -296,21 +314,22 @@ def ocr_to_docx(src: Path, docx_path: Path, lang: str = "pol+eng",
     out.save(docx_path)
 
 
-def convert_one(src: Path, out_dir: Path, lang: str = "pol+eng",
-                pages: str = "", skip_blank: bool = True) -> Path:
+def convert_one(src: Path, out_dir: Path, lang: str = "pol+eng", pages: str = "",
+                skip_blank: bool = True, dpi: int = DPI, naming: str = "{0}",
+                overwrite: str = "overwrite") -> Path:
     """pages: zakres jak w okienku ('1-3, 5'; puste = wszystkie). Obrazy maja
     jedna strone, wiec zakres ich nie dotyczy."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    docx = out_dir / f"{src.stem}.docx"
+    docx = target(out_dir, src.stem, naming, overwrite)
     if src.suffix.lower() in IMAGE_EXTS:
-        ocr_to_docx(src, docx, lang, None, skip_blank)
+        ocr_to_docx(src, docx, lang, None, skip_blank, dpi)
         return docx
     with pymupdf.open(src) as doc:
         sel = parse_pages(pages, len(doc))
         # skan = strona bez tekstu, ale z obrazem (pusta bez obrazu to nie skan)
         scan = any(not doc[i].get_text().strip() and doc[i].get_images() for i in sel)
     if scan:
-        ocr_to_docx(src, docx, lang, sel, skip_blank)
+        ocr_to_docx(src, docx, lang, sel, skip_blank, dpi)
         return docx
     # cyfrowy PDF: pdf2docx zachowuje uklad i tabele - najlepsza jakosc
     c = Converter(str(src))
@@ -321,11 +340,34 @@ def convert_one(src: Path, out_dir: Path, lang: str = "pol+eng",
     return docx
 
 
+def convert_merged(files: list[Path], out_dir: Path, pages: str = "", **kw) -> Path:
+    """Pismo + zalaczniki -> jeden DOCX nazwany jak pierwszy plik. Najpierw
+    jeden wspolny PDF (zdjecia na stronach szerokosci A4), potem zwykla konwersja.
+    ponytail: skan wsrod plikow = cala paczka przez OCR, wiec tabele z cyfrowych
+    PDF-ow ida jako tekst; osobne pliki, gdy tabele sa wazne."""
+    with tempfile.TemporaryDirectory() as td:
+        merged = Path(td) / f"{files[0].stem}.pdf"
+        out = pymupdf.open()
+        for f in files:
+            with pymupdf.open(f) as d:
+                if f.suffix.lower() in IMAGE_EXTS:
+                    with pymupdf.open("pdf", d.convert_to_pdf()) as img:
+                        r = img[0].rect
+                        page = out.new_page(width=595.3, height=r.height * 595.3 / r.width)
+                        page.show_pdf_page(page.rect, img, 0)
+                else:
+                    for i in parse_pages(pages, len(d)):
+                        out.insert_pdf(d, from_page=i, to_page=i)
+        out.save(merged)
+        out.close()
+        return convert_one(merged, out_dir, **kw)
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("PDF/PNG/JPG -> DOCX")
-        self.geometry("720x610")
+        self.geometry("720x720")
         self.files: list[Path] = []
         self.log_q: queue.Queue[str] = queue.Queue()
 
@@ -349,19 +391,30 @@ class App(tk.Tk):
         self.lang_var = tk.StringVar(value=next(iter(LANGS)))
         self.pages_var = tk.StringVar()
         self.blank_var = tk.BooleanVar(value=True)
-        ttk.Label(opt, text="Jezyk OCR:").grid(row=0, column=0, sticky="w")
-        ttk.Combobox(opt, textvariable=self.lang_var, values=list(LANGS), state="readonly",
-                     width=32).grid(row=0, column=1, sticky="w", padx=6)
-        ttk.Label(opt, text="Strony:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        ttk.Entry(opt, textvariable=self.pages_var, width=20).grid(row=1, column=1, sticky="w",
-                                                                    padx=6, pady=(6, 0))
+        self.merge_var = tk.BooleanVar(value=False)
+        self.dpi_var = tk.StringVar(value=next(iter(DPIS)))
+        self.naming_var = tk.StringVar(value=next(iter(NAMING)))
+        self.overwrite_var = tk.StringVar(value=next(iter(OVERWRITE)))
+        for row, (label, var, values) in enumerate((
+                ("Jezyk OCR:", self.lang_var, LANGS),
+                ("Rozdzielczosc OCR:", self.dpi_var, DPIS),
+                ("Nazwa pliku:", self.naming_var, NAMING),
+                ("Gdy plik istnieje:", self.overwrite_var, OVERWRITE))):
+            ttk.Label(opt, text=label).grid(row=row, column=0, sticky="w", pady=(0, 6))
+            ttk.Combobox(opt, textvariable=var, values=list(values), state="readonly",
+                         width=32).grid(row=row, column=1, sticky="w", padx=6, pady=(0, 6))
+        ttk.Label(opt, text="Strony:").grid(row=4, column=0, sticky="w")
+        ttk.Entry(opt, textvariable=self.pages_var, width=20).grid(row=4, column=1, sticky="w", padx=6)
         ttk.Label(opt, text="np. 1-3, 5   (puste = wszystkie)", foreground="gray").grid(
-            row=1, column=2, sticky="w", pady=(6, 0))
+            row=4, column=2, sticky="w")
         ttk.Checkbutton(opt, text="Pomijaj puste strony (np. tyl skanu dwustronnego)",
-                        variable=self.blank_var).grid(row=2, column=0, columnspan=3, sticky="w",
+                        variable=self.blank_var).grid(row=5, column=0, columnspan=3, sticky="w",
+                                                      pady=(6, 0))
+        ttk.Checkbutton(opt, text="Jeden plik zbiorczy (pismo + zalaczniki w jednym DOCX)",
+                        variable=self.merge_var).grid(row=6, column=0, columnspan=3, sticky="w",
                                                       pady=(6, 0))
         ttk.Button(opt, text="Slownik poprawek OCR...", command=self.edit_fixes).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+            row=7, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         self.btn = ttk.Button(self, text="Konwertuj", command=self.start)
         self.btn.pack(pady=10)
@@ -393,7 +446,8 @@ class App(tk.Tk):
             filetypes=[("PDF/PNG/JPG", "*.pdf *.png *.jpg *.jpeg"), ("Wszystkie", "*.*")],
         )
         if f:
-            self.load([Path(x) for x in f], "wybor reczny")
+            # alfabetycznie - okno wyboru oddaje pliki w kolejnosci klikania
+            self.load(sorted(Path(x) for x in f), "wybor reczny")
 
     def pick_folder(self):
         d = filedialog.askdirectory(title="Folder ze zrodlowymi plikami")
@@ -417,27 +471,42 @@ class App(tk.Tk):
             messagebox.showwarning("PDF -> DOCX", "Najpierw wskaz pliki albo folder.")
             return
         opts = {"lang": LANGS[self.lang_var.get()], "pages": self.pages_var.get(),
-                "skip_blank": self.blank_var.get()}
+                "skip_blank": self.blank_var.get(), "dpi": DPIS[self.dpi_var.get()],
+                "naming": NAMING[self.naming_var.get()],
+                "overwrite": OVERWRITE[self.overwrite_var.get()]}
         try:  # literowka w zakresie: komunikat od razu, nie przy kazdym pliku
             parse_pages(opts["pages"], 10**6)
         except ValueError as e:
             messagebox.showwarning("PDF -> DOCX", str(e))
             return
+        merge = self.merge_var.get() and len(self.files) > 1
+        out_dir = Path(self.out_var.get())
+        if opts["overwrite"] == "ask":  # jedno pytanie na cala paczke, przed startem
+            names = self.files[:1] if merge else self.files
+            taken = [t for f in names if (t := target(out_dir, f.stem, opts["naming"])).exists()]
+            answer = taken and messagebox.askyesnocancel(
+                "PDF -> DOCX", f"W folderze OUTPUT jest juz {len(taken)} z tych plikow, "
+                f"np. {taken[0].name}.\n\nTak = nadpisz\nNie = zapisz obok z numerem (2)")
+            if answer is None:
+                return
+            opts["overwrite"] = "number" if answer is False else "overwrite"
         self.btn.config(state="disabled")
         self.log.delete("1.0", "end")
-        self.bar.config(value=0, maximum=len(self.files))
-        threading.Thread(target=self.work, args=(list(self.files), Path(self.out_var.get()), opts),
-                         daemon=True).start()
+        jobs = [list(self.files)] if merge else list(self.files)
+        self.bar.config(value=0, maximum=len(jobs))
+        threading.Thread(target=self.work, args=(jobs, out_dir, opts), daemon=True).start()
 
     def work(self, files, out_dir, opts):
         ok = 0
         for i, pdf in enumerate(files, 1):
+            merged = isinstance(pdf, list)  # plik zbiorczy: lista plikow
+            name = f"{pdf[0].name} + {len(pdf) - 1} zal." if merged else pdf.name
             try:
-                docx = convert_one(pdf, out_dir, **opts)
+                docx = (convert_merged if merged else convert_one)(pdf, out_dir, **opts)
                 ok += 1
-                self.log_q.put(f"[{i}/{len(files)}] OK   {pdf.name} -> {docx.name}")
+                self.log_q.put(f"[{i}/{len(files)}] OK   {name} -> {docx.name}")
             except Exception as e:  # jeden zly plik nie moze zatrzymac reszty
-                self.log_q.put(f"[{i}/{len(files)}] BLAD {pdf.name}: {e}")
+                self.log_q.put(f"[{i}/{len(files)}] BLAD {name}: {e}")
             self.log_q.put(f"__progress__{i}")
         self.log_q.put(f"__done__Gotowe: {ok}/{len(files)} przekonwertowanych -> {out_dir}")
 
@@ -456,7 +525,6 @@ class App(tk.Tk):
 
 
 def selftest():
-    import tempfile
     import zipfile
 
     import pymupdf
@@ -558,6 +626,27 @@ def selftest():
             x = zipfile.ZipFile(convert_one(td / "duplex.pdf", td / "OUT", skip_blank=skip)
                                 ).read("word/document.xml").decode("utf8")
             assert x.count("<w:pageBreakBefore/>") == breaks, f"puste strony skip={skip}"
+
+        # opcje: nazwa wyniku i nadpisywanie
+        out_ = td / "NAZWY"
+        assert convert_one(src, out_, naming="{0}_OCR").name == "t_OCR.docx"
+        assert target(out_, "t", "{0}_{1:%Y-%m-%d}").name == f"t_{date.today():%Y-%m-%d}.docx"
+        assert convert_one(src, out_, naming="{0}_OCR", overwrite="number").name == "t_OCR (2).docx"
+        assert target(out_, "t", "{0}_OCR", "number").name == "t_OCR (3).docx"
+        assert convert_one(src, out_, naming="{0}_OCR").name == "t_OCR.docx", "nadpisz"
+
+        # opcje: rozdzielczosc 400 DPI
+        xml7 = zipfile.ZipFile(convert_one(td / "mix.pdf", out_, pages="2", dpi=400)
+                               ).read("word/document.xml").decode("utf8")
+        assert "777" in xml7, f"400 DPI: {xml7[:300]}"
+
+        # opcje: jeden plik zbiorczy (pismo + skan + zdjecie z EXIF), zakres stron
+        m = convert_merged([td / "mix.pdf", png, td / "foto.jpg"], td / "ZB", pages="1")
+        xml8 = zipfile.ZipFile(m).read("word/document.xml").decode("utf8")
+        assert m.name == "mix.docx" and len(list((td / "ZB").iterdir())) == 1
+        for word in ("przewodnie", "42", "4321"):
+            assert word in xml8, f"zbiorczy: brak {word}: {xml8[:300]}"
+        assert "777" not in xml8, "zbiorczy: zakres stron pominiety"
 
     # opcje: jezyki OCR - kazdy model musi byc w tessdata/
     for codes in LANGS.values():
